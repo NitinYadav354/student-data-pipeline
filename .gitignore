@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+venv/
+.venv/
+*.egg-info/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+npm-debug.log*
+
+# Env files (never commit real secrets/URLs)
+.env
+.env.local
+!.env.local.example
+!backend/.env.example
+
+# OS
+.DS_Store
