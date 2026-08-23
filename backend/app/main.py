@@ -11,6 +11,7 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.routers.students import router as students_router
 
 # Comma-separated list of allowed frontend origins.
 # Local dev defaults to the Next.js dev server; production origin(s)
@@ -34,6 +35,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(students_router)
 
 
 @app.get("/health")
@@ -41,8 +43,3 @@ def health_check() -> dict:
     """Basic liveness check — also used by the frontend to confirm the
     backend is reachable before offering the upload UI."""
     return {"status": "ok", "service": "student-data-pipeline-backend"}
-
-
-# Phase 1 will add: POST /upload (raw CSV in -> cleaning report out),
-# GET /students (cleaned roster), PATCH /students/{id}/status (debar toggle),
-# GET /shortlist (filtered + live stats), GET /shortlist/export (CSV out).
