@@ -53,7 +53,7 @@ def _score(value: object) -> float | None:
 def clean_csv(contents: bytes) -> CleaningResult:
     try:
         raw = pd.read_csv(BytesIO(contents), dtype=object)
-    except Exception as exc:  # pandas provides useful parser errors to the client
+    except Exception as exc:
         raise ValueError("The uploaded file is not a readable CSV.") from exc
 
     raw.columns = [str(column).strip() for column in raw.columns]
