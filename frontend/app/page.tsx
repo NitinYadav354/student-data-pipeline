@@ -1,65 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { API_BASE_URL } from "@/lib/api";
+import { ChangeEvent, useMemo, useState } from "react";
+import { Report, request, Student } from "@/lib/api";
 
-type ConnectionState = "checking" | "connected" | "unreachable";
+type UploadResponse = { students: Student[]; report: Report };
 
 export default function Home() {
-  const [state, setState] = useState<ConnectionState>("checking");
+  const [students, setStudents] = useState<Student[]>([]);
+  const [report, setReport] = useState<Report | null>(null);
+  const [threshold, setThreshold] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const shortlist = useMemo(() => students.filter((s) => s.status === "Active" && s.total >= threshold), [students, threshold]);
+  const average = shortlist.length ? (shortlist.reduce((sum, s) => sum + s.total, 0) / shortlist.length).toFixed(1) : "0";
 
-  useEffect(() => {
-    let cancelled = false;
-
-    fetch(`${API_BASE_URL}/health`)
-      .then((res) => {
-        if (!res.ok) throw new Error("bad response");
-        return res.json();
-      })
-      .then(() => {
-        if (!cancelled) setState("connected");
-      })
-      .catch(() => {
-        if (!cancelled) setState("unreachable");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-zinc-50 font-sans">
-      <h1 className="text-xl font-semibold text-zinc-900">
-        Student Data Pipeline
-      </h1>
-      <p className="text-sm text-zinc-500">
-        Setup checkpoint — the real UI lands in the next phase.
-      </p>
-      <StatusBadge state={state} />
-      <p className="text-xs text-zinc-400">
-        checking {API_BASE_URL}/health
-      </p>
-    </div>
-  );
+  async function upload(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]; if (!file) return;
+    setLoading(true); setError(""); const form = new FormData(); form.append("file", file);
+    try { const data = await request<UploadResponse>("/upload", { method: "POST", body: form }); setStudents(data.students); setReport(data.report); }
+    catch (err) { setError(err instanceof Error ? err.message : "Upload failed."); }
+    finally { setLoading(false); e.target.value = ""; }
+  }
+  async function toggle(s: Student) {
+    const status = s.status === "Active" ? "Debarred" : "Active";
+    setStudents((xs) => xs.map((x) => x.id === s.id ? { ...x, status } : x));
+    try { await request<Student>(`/students/${s.id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }); }
+    catch (err) { setStudents((xs) => xs.map((x) => x.id === s.id ? s : x)); setError(err instanceof Error ? err.message : "Could not save status."); }
+  }
+  function exportCsv() {
+    const rows = [["Name", "Gender", "Grade", "Math", "Science", "English", "Total", "Status"], ...shortlist.map((s) => [s.name, s.gender, s.grade, s.Math, s.Science, s.English, s.total, s.status])];
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replaceAll('"', '""')}"`).join(",")).join("\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" })); a.download = "student-shortlist.csv"; a.click(); URL.revokeObjectURL(a.href);
+  }
+  return <main className="min-h-screen bg-slate-950 text-slate-100"><div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
+    <header className="mb-9 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="mb-2 text-xs font-bold tracking-[.22em] text-cyan-400">STUDENT OPERATIONS</p><h1 className="text-3xl font-semibold sm:text-4xl">Data Pipeline <span className="text-slate-500">/</span> Shortlist</h1></div><label className="cursor-pointer rounded-lg bg-cyan-400 px-5 py-3 text-center text-sm font-bold text-slate-950 hover:bg-cyan-300">{loading ? "Cleaning data…" : "Upload raw CSV"}<input className="hidden" type="file" accept=".csv,text/csv" disabled={loading} onChange={upload} /></label></header>
+    {error && <div className="mb-6 rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">{error}</div>}
+    {!report ? <section className="grid min-h-80 place-items-center rounded-2xl border border-dashed border-slate-700 bg-slate-900/50 p-8 text-center"><div><p className="text-lg font-medium">Upload a student CSV to begin</p><p className="mt-2 text-sm text-slate-400">Required: Name, Gender, Grade, Math, Science, English. Total is checked and recalculated.</p></div></section> : <>
+      <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Metric label="Rows accepted" value={`${report.accepted_rows} / ${report.input_rows}`} /><Metric label="Rejected rows" value={String(report.rejected_rows)} tone="rose" /><Metric label="Duplicates removed" value={String(report.exact_duplicates_removed)} /><Metric label="Totals corrected" value={String(report.totals_recalculated)} /></section>
+      <section className="mb-6 rounded-2xl border border-slate-800 bg-slate-900 p-5"><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Live shortlist</h2><p className="mt-1 text-sm text-slate-400">Only Active students meeting the threshold are included.</p></div><div className="flex items-center gap-3"><label className="text-sm text-slate-300">Minimum total</label><input aria-label="Minimum total score" className="w-24 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm" type="number" min="0" max="300" value={threshold} onChange={(e) => setThreshold(Math.max(0, Number(e.target.value)))} /><button onClick={exportCsv} className="rounded-md border border-cyan-400/50 px-3 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-400/10">Export CSV</button></div></div><div className="mt-5 grid grid-cols-2 gap-3 border-t border-slate-800 pt-4"><Metric label="Matched students" value={String(shortlist.length)} /><Metric label="Average total" value={average} /></div></section>
+      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900"><div className="flex items-center justify-between border-b border-slate-800 p-5"><div><h2 className="font-semibold">Cleaned roster</h2><p className="mt-1 text-sm text-slate-400">Toggle status to immediately include or exclude a student.</p></div><span className="text-xs text-slate-500">{students.length} records</span></div><div className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead className="bg-slate-950/50 text-xs uppercase tracking-wider text-slate-500"><tr>{["Student", "Gender", "Grade", "Math", "Science", "English", "Total", "Status"].map((h) => <th className="px-5 py-3 font-medium" key={h}>{h}</th>)}</tr></thead><tbody className="divide-y divide-slate-800">{students.map((s) => <tr key={s.id} className={s.status === "Debarred" ? "bg-rose-500/[.03] text-slate-500" : "hover:bg-slate-800/45"}><td className="px-5 py-3 font-medium text-slate-100">{s.name}</td><td className="px-5 py-3">{s.gender}</td><td className="px-5 py-3">{s.grade}</td><td className="px-5 py-3">{s.Math}</td><td className="px-5 py-3">{s.Science}</td><td className="px-5 py-3">{s.English}</td><td className="px-5 py-3 font-semibold text-cyan-300">{s.total}</td><td className="px-5 py-3"><button onClick={() => toggle(s)} className={`rounded-full px-3 py-1 text-xs font-bold ${s.status === "Active" ? "bg-emerald-400/15 text-emerald-300" : "bg-rose-400/15 text-rose-300"}`}>{s.status}</button></td></tr>)}</tbody></table></div></section>
+      <section className="mt-6 grid gap-6 lg:grid-cols-2"><Panel title="Cleaning decisions" items={report.rules} /><Panel title="Exceptions requiring attention" items={[...report.rejected.map((x) => `Row ${x.row}: ${x.reason}`), ...report.possible_duplicate_review.map((x) => `${x.name} may match ${x.possible_match} (${x.similarity}% similar)`)]} empty="No rejected rows or possible duplicate matches." /></section>
+    </>}</div></main>;
 }
-
-function StatusBadge({ state }: { state: ConnectionState }) {
-  const copy = {
-    checking: "Checking backend…",
-    connected: "Backend connected",
-    unreachable: "Backend unreachable — is uvicorn running on :8000?",
-  }[state];
-
-  const color = {
-    checking: "bg-zinc-200 text-zinc-700",
-    connected: "bg-emerald-100 text-emerald-700",
-    unreachable: "bg-red-100 text-red-700",
-  }[state];
-
-  return (
-    <span className={`rounded-full px-3 py-1 text-sm font-medium ${color}`}>
-      {copy}
-    </span>
-  );
-}
+function Metric({ label, value, tone = "cyan" }: { label: string; value: string; tone?: "cyan" | "rose" }) { return <div className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-3"><p className="text-xs uppercase tracking-wider text-slate-500">{label}</p><p className={`mt-1 text-2xl font-semibold ${tone === "rose" ? "text-rose-300" : "text-cyan-300"}`}>{value}</p></div>; }
+function Panel({ title, items, empty }: { title: string; items: string[]; empty?: string }) { return <section className="rounded-2xl border border-slate-800 bg-slate-900 p-5"><h2 className="font-semibold">{title}</h2>{items.length ? <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-400">{items.map((item, i) => <li key={i} className="border-l-2 border-slate-700 pl-3">{item}</li>)}</ul> : <p className="mt-3 text-sm text-slate-500">{empty}</p>}</section>; }
