@@ -68,7 +68,7 @@ def clean_csv(contents: bytes) -> CleaningResult:
     normalized: list[dict[str, Any]] = []
     unknown_gender = 0
     total_corrected = 0
-    for row_number, (_, row) in enumerate(raw.iterrows(), start=2):
+    for row_number, (_, row) in enumerate(raw.iterrows(), start=1):
         name, grade = _name(row["Name"]), _grade(row["Grade"])
         scores = {column: _score(row[column]) for column in SCORE_COLUMNS}
         reasons = []
@@ -87,7 +87,7 @@ def clean_csv(contents: bytes) -> CleaningResult:
         total = round(sum(scores.values()), 2)
         source_total = _score(row["Total"]) if "Total" in raw.columns else None
         total_corrected += source_total != total
-        normalized.append({"name": name, "gender": gender, "grade": grade, **scores, "total": total})
+        normalized.append({"source_row": row_number, "name": name, "gender": gender, "grade": grade, **scores, "total": total})
     validation_ms = (perf_counter() - validation_started) * 1000
 
     exact_deduplication_started = perf_counter()
@@ -104,12 +104,19 @@ def clean_csv(contents: bytes) -> CleaningResult:
     exact_deduplication_ms = (perf_counter() - exact_deduplication_started) * 1000
 
     fuzzy_review_started = perf_counter()
-    review_flags: list[dict[str, str]] = []
+    review_flags: list[dict[str, str | int]] = []
     names = [student["name"] for student in unique]
     for index, name in enumerate(names):
         match = process.extractOne(name, names[index + 1 :], scorer=fuzz.ratio, score_cutoff=88)
         if match:
-            review_flags.append({"name": name, "possible_match": match[0], "similarity": str(round(match[1]))})
+            possible_match = unique[index + 1 + match[2]]
+            review_flags.append({
+                "name": name,
+                "source_row": unique[index]["source_row"],
+                "possible_match": match[0],
+                "possible_source_row": possible_match["source_row"],
+                "similarity": str(round(match[1])),
+            })
     fuzzy_review_ms = (perf_counter() - fuzzy_review_started) * 1000
 
     students = [{"id": index + 1, **student, "status": "Active"} for index, student in enumerate(unique)]

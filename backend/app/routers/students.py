@@ -66,8 +66,8 @@ def shortlist(min_total: float = 0) -> dict:
 def export_shortlist(min_total: float = 0) -> Response:
     rows = shortlist(min_total)["students"]
     stream = StringIO()
-    writer = csv.DictWriter(stream, fieldnames=["name", "gender", "grade", "Math", "Science", "English", "total", "status"])
+    writer = csv.DictWriter(stream, fieldnames=["source_row", "name", "gender", "grade", "Math", "Science", "English", "total", "status"])
     writer.writeheader()
     for student in rows:
-        writer.writerow({"name": student["name"], "gender": student["gender"], "grade": student["grade"], "Math": student["Math"], "Science": student["Science"], "English": student["English"], "total": student["total"], "status": student["status"]})
+        writer.writerow({"source_row": student["source_row"], "name": student["name"], "gender": student["gender"], "grade": student["grade"], "Math": student["Math"], "Science": student["Science"], "English": student["English"], "total": student["total"], "status": student["status"]})
     return Response(stream.getvalue(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=shortlist.csv"})
