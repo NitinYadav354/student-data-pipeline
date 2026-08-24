@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from io import BytesIO
+from time import perf_counter
 from typing import Any
 
 import pandas as pd
@@ -51,11 +52,15 @@ def _score(value: object) -> float | None:
 
 
 def clean_csv(contents: bytes) -> CleaningResult:
+    cleaning_started = perf_counter()
     try:
+        parse_started = perf_counter()
         raw = pd.read_csv(BytesIO(contents), dtype=object)
     except Exception as exc:
         raise ValueError("The uploaded file is not a readable CSV.") from exc
+    parse_ms = (perf_counter() - parse_started) * 1000
 
+    validation_started = perf_counter()
     raw.columns = [str(column).strip() for column in raw.columns]
     missing_columns = [column for column in REQUIRED_COLUMNS if column not in raw.columns]
     if missing_columns:
@@ -85,7 +90,9 @@ def clean_csv(contents: bytes) -> CleaningResult:
         source_total = _score(row["Total"]) if "Total" in raw.columns else None
         total_corrected += source_total != total
         normalized.append({"name": name, "gender": gender, "grade": grade, **scores, "total": total})
+    validation_ms = (perf_counter() - validation_started) * 1000
 
+    exact_deduplication_started = perf_counter()
     unique: list[dict[str, Any]] = []
     seen: set[tuple[Any, ...]] = set()
     duplicate_count = 0
@@ -96,13 +103,16 @@ def clean_csv(contents: bytes) -> CleaningResult:
             continue
         seen.add(signature)
         unique.append(student)
+    exact_deduplication_ms = (perf_counter() - exact_deduplication_started) * 1000
 
+    fuzzy_review_started = perf_counter()
     review_flags: list[dict[str, str]] = []
     names = [student["name"] for student in unique]
     for index, name in enumerate(names):
         match = process.extractOne(name, names[index + 1 :], scorer=fuzz.ratio, score_cutoff=88)
         if match:
             review_flags.append({"name": name, "possible_match": match[0], "similarity": str(round(match[1]))})
+    fuzzy_review_ms = (perf_counter() - fuzzy_review_started) * 1000
 
     students = [{"id": index + 1, **student, "status": "Active"} for index, student in enumerate(unique)]
     report = {
@@ -110,6 +120,13 @@ def clean_csv(contents: bytes) -> CleaningResult:
         "exact_duplicates_removed": duplicate_count, "totals_recalculated": total_corrected,
         "unknown_gender_normalized": unknown_gender, "rejected": rejected[:100],
         "possible_duplicate_review": review_flags[:50],
+        "performance_ms": {
+            "csv_parse": round(parse_ms, 2),
+            "validation_and_normalization": round(validation_ms, 2),
+            "exact_deduplication": round(exact_deduplication_ms, 2),
+            "fuzzy_duplicate_review": round(fuzzy_review_ms, 2),
+            "total_cleaning": round((perf_counter() - cleaning_started) * 1000, 2),
+        },
         "rules": [
             "Names are trimmed, surrounding stray quotes are removed, and title-cased.",
             "Gender values M/male and F/female are standardized; unknown values become Unknown.",
