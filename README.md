@@ -26,7 +26,6 @@ CSV upload → FastAPI cleaning API → cleaned roster + audit report
 |---|---|---|
 | Backend | FastAPI, pandas, rapidfuzz | CSV validation, data cleaning, duplicate checks, status API |
 | Frontend | Next.js, TypeScript, Tailwind CSS | Upload workflow, table UI, live filters, export |
-| Testing | pytest | Cleaning and validation edge cases |
 
 ## Data-cleaning approach
 
@@ -122,8 +121,6 @@ AI was used as a development assistant, not as an autonomous decision-maker for 
 
 - It helped scaffold boilerplate FastAPI and Next.js code, draft Tailwind CSS, and suggest UI structure.
 - It assisted with debugging TypeScript/build issues and generating initial test cases.
-- The cleaning policy, acceptance/rejection rules, and the decision to flag rather than automatically merge ambiguous records were reviewed and implemented as explicit deterministic application logic.
-- Generated code was inspected and integrated; frontend linting and production builds were run, and backend cleaning tests are included for local execution.
 
 ## Demo video
 
