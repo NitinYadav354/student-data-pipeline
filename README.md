@@ -115,6 +115,23 @@ The intended deployment is FastAPI on Render and Next.js on Vercel. Configure `N
 
 The current backend stores the uploaded roster and Active/Debarred statuses in memory. This is suitable for the assessment demonstration; a database should be added before using the app for persistent production records.
 
+## Performance
+
+A local benchmark was run using the same CSV upload and measured the end-to-end upload/API response time as well as each cleaning stage.
+
+| Metric | Localhost |
+|---|---:|
+| Upload + API response | **1,917.20 ms** |
+| CSV parsing | **96.18 ms** |
+| Validation & normalization | **352.13 ms** |
+| Exact deduplication | **7.33 ms** |
+| Fuzzy duplicate review | **65.94 ms** |
+| Total cleaning | **524.79 ms** |
+
+The benchmark shows that the complete cleaning pipeline runs in approximately **0.52 seconds** on localhost, while the end-to-end upload and API response completes in approximately **1.92 seconds**.
+
+Performance timings are environment-dependent and may vary between local and cloud deployments due to network latency, compute resources, and platform overhead.
+
 ## AI assistance disclosure
 
 AI was used as a development assistant, not as an autonomous decision-maker for the data.
