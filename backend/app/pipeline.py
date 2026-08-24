@@ -1,5 +1,3 @@
-"""Deterministic CSV cleaning rules for the student roster."""
-
 from __future__ import annotations
 
 import re
